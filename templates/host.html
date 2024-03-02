@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Host Page</title>
+</head>
+<body>
+    <div>
+        <h1>Host Page</h1>
+        <div>
+            <p>Game ID: {{ game_id }}</p>
+            <button id="start_button" onclick="startGame()">Start Game</button>
+        </div>
+        <div>
+            <p>Connected Players:</p>
+            <ul id="player_list"></ul>
+        </div>
+        <div>
+            <p>Players Answered: <span id="answered">0</span>/{{ total_players }}</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js" integrity="sha384-Gr6Lu2Ajx28mzwyVR8CFkULdCU7kMlZ9UthllibdOSo6qAiN+yXNHqtgdTvFXMT4" crossorigin="anonymous"></script>
+    <script>
+        const socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        socket.on('connect', function () {
+            socket.emit('join_room', { 'username': 'Host', 'game_id': '{{ game_id }}' });
+        });
+
+        socket.on('update_players', function (data) {
+            const playerList = document.getElementById('player_list');
+            playerList.innerHTML = '';
+            data.players.forEach(player => {
+                const li = document.createElement('li');
+                li.textContent = player;
+                playerList.appendChild(li);
+            });
+        });
+
+        socket.on('game_started', function () {
+            document.getElementById('start_button').disabled = true;
+        });
+
+        socket.on('update_answers', function (data) {
+            document.getElementById('answered').innerText = data.answered;
+        });
+
+        function startGame() {
+            socket.emit('start_game', { 'game_id': '{{ game_id }}' });
+        }
+    </script>
+</body>
+</html>

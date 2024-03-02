@@ -1,111 +1,55 @@
-# app.py
-from flask import Flask, render_template, request, session, redirect, url_for
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask import Flask, render_template, request, redirect, url_for
+from flask_socketio import SocketIO, join_room, leave_room, emit
 import random
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret_key'
 socketio = SocketIO(app)
 
-questions = [
-    {'question': 'What is the capital of France?', 'options': ['Paris', 'Berlin', 'Rome', 'Madrid'], 'correct_answer': 'Paris'},
-    {'question': 'Which planet is known as the Red Planet?', 'options': ['Earth', 'Mars', 'Jupiter', 'Venus'], 'correct_answer': 'Mars'},
-    # Add more questions as needed
-]
-
-active_rooms = {}
-
-def update_player_list(room):
-    player_list = active_rooms.get(room, {}).get('players', [])
-    emit('player_list_update', {'players': player_list}, room=room)
+# Store information about active games
+active_games = {}
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/join', methods=['POST'])
-def join():
+@app.route('/create_game', methods=['POST'])
+def create_game():
+    game_id = str(random.randint(1000, 9999))
+    active_games[game_id] = {'questions': ['Question 1', 'Question 2', 'Question 3'], 'answers': [2, 1, 3], 'current_question': 0, 'answered': 0, 'players': []}
+    return redirect(url_for('host', game_id=game_id))
+
+@app.route('/join_game', methods=['POST'])
+def join_game():
     username = request.form['username']
-    room = request.form['room']
-    session['username'] = username
-    session['room'] = room
+    game_id = request.form['game_id']
+    return render_template('player.html', username=username, game_id=game_id)
 
-    if room not in active_rooms:
-        # Handle the case where the room does not exist
-        return redirect(url_for('index'))
-
-    join_room(room)
-    active_rooms[room]['players'].append(username)
-    emit('notification', {'message': f'{username} has joined the room'}, room=room)
-    update_player_list(room)
-
-    return redirect(url_for('player_room'))
-
-@app.route('/create', methods=['POST'])
-def create():
-    username = request.form['username']
-    room = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=6))
-    session['username'] = username
-    session['room'] = room
-    join_room(room)
-    active_rooms[room] = {'host': username, 'players': [username]}
-    emit('notification', {'message': f'{username} has created and joined the room'}, room=room)
-    update_player_list(room)
-    return redirect(url_for('host_room'))
-
-@app.route('/host-room')
-def host_room():
-    username = session.get('username', 'Anonymous')
-    room = session.get('room', '')
-    return render_template('host_room.html', username=username, room=room)
-
-@app.route('/player-room')
-def player_room():
-    username = session.get('username', 'Anonymous')
-    room = session.get('room', '')
-
-    # Ensure the user is in a valid room before allowing access to the quiz
-    if room not in active_rooms or username not in active_rooms[room]['players']:
-        return redirect(url_for('index'))
-
-    return render_template('player_room.html', username=username, room=room)
-
-@app.route('/quiz')
-def quiz():
-    username = session.get('username', 'Anonymous')
-    room = session.get('room', '')
-
-    # Ensure the user is in a valid room before allowing access to the quiz
-    if room not in active_rooms or username not in active_rooms[room]['players']:
-        return redirect(url_for('index'))
-
-    # Get quiz data (questions and options) - Replace this with your quiz data
-    quiz_data = {'questions': questions}
-    
-    # Emit quiz data to clients in the room
-    socketio.emit('quiz_data', quiz_data, room=room)
-
-    return render_template('quiz.html')
+@app.route('/host/<game_id>')
+def host(game_id):
+    return render_template('host.html', game_id=game_id)
 
 @socketio.on('connect')
 def handle_connect():
-    username = session.get('username', 'Anonymous')
-    room = session.get('room', '')
+    print('Client connected')
 
-    if room not in active_rooms:
-        # Handle the case where the room does not exist
-        return
-
-    join_room(room)
-    active_rooms[room]['players'].append(username)
-    update_player_list(room)
+@socketio.on('join_room')
+def handle_join_room(data):
+    username = data['username']
+    game_id = data['game_id']
+    join_room(game_id)
+    active_games[game_id]['players'].append(username)
+    emit('update_players', {'players': active_games[game_id]['players']}, room=game_id)
 
 @socketio.on('start_game')
-def handle_start_game():
-    username = session.get('username', 'Anonymous')
-    room = session.get('room', '')
-    if username == active_rooms.get(room, {}).get('host'):
-        emit('game_started', room=room, broadcast=True)
+def handle_start_game(data):
+    game_id = data['game_id']
+    emit('game_started', room=game_id)
+
+@socketio.on('answer_question')
+def handle_answer_question(data):
+    game_id = data['game_id']
+    active_games[game_id]['answered'] += 1
+    emit('update_answers', {'answered': active_games[game_id]['answered']}, room=game_id)
 
 if __name__ == '__main__':
-    socketio.run(app)
+    socketio.run(app, debug=True)

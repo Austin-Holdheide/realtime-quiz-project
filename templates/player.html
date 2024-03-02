@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Page</title>
+</head>
+<body>
+    <div>
+        <h1>Welcome, {{ username }}!</h1>
+        <div>
+            <p>Game ID: {{ game_id }}</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js" integrity="sha384-Gr6Lu2Ajx28mzwyVR8CFkULdCU7kMlZ9UthllibdOSo6qAiN+yXNHqtgdTvFXMT4" crossorigin="anonymous"></script>
+    <script>
+        const socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        socket.on('connect', function () {
+            const username = '{{ username }}';
+            const game_id = '{{ game_id }}';
+            socket.emit('join_room', { 'username': username, 'game_id': game_id });
+        });
+    </script>
+</body>
+</html>
